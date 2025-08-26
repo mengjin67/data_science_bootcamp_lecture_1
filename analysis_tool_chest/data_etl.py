@@ -13,8 +13,8 @@ class DataETL:
         profile = self.ProfileReport(self.data, title=title, minimal=True)
         profile.to_file(f"{output_folder}/{file_name}")
 
-    def transform(self):
-        """Perform ETL transformations on the data."""
+    def transform(self, cap_dict=None):
+        """Perform ETL transformations on the data. Optionally cap variables using a dictionary of {var: cap_value}."""
         # Convert 'date_of_birth' to datetime, coercing errors to NaT for invalid formats
         self.data['date_of_birth'] = self.pd.to_datetime(self.data['date_of_birth'], format='%m/%d/%Y', errors='coerce')
 
@@ -35,5 +35,12 @@ class DataETL:
         self.data['agecat2'] = self.data['agecat2'].astype(float)
         # Group 'MCARA', 'CONVT', 'BUS', and 'RDSTR' 'veh_body' as 'Other'
         self.data.loc[self.data['veh_body'].isin(['MCARA','CONVT','BUS','RDSTR']), 'veh_body'] = 'Other'
+
+        # Cap variables if cap_dict is provided
+        if cap_dict is not None:
+            for var, cap_value in cap_dict.items():
+                if var in self.data.columns:
+                    self.data[var] = self.data[var].clip(upper=cap_value)
+                    print(f"{var} capped at {cap_value}")
 
         return self.data
