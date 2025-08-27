@@ -183,6 +183,7 @@ class ConsistencyCheck:
         plt.tight_layout()
         plt.show()
 
+
 class ConsistencyCheckList:
     """
     Runs ConsistencyCheck for a list of predictor variables and provides batch plotting.
@@ -224,3 +225,239 @@ class ConsistencyCheckList:
         for pred_var, cc in self.checks.items():
             print(f"\n--- Consistency Plot for {pred_var} ---")
             cc.plot()
+
+
+class PredictivenessCheck:
+    """
+    Bins, aggregates, and plots predictiveness statistics for a given predictor and target.
+    Usage:
+        pc = PredictivenessCheck(df, pred_var, exp_var, var_1, var_2=None)
+        pc.aggregate()
+        pc.plot()
+    """
+    def __init__(self, df, pred_var, exp_var, var_1, var_2=None):
+        self.df = df.copy()
+        self.pred_var = pred_var
+        self.exp_var = exp_var
+        self.var_1 = var_1
+        self.var_2 = var_2
+        self.agg_df = None
+
+
+    def binning(self, nbins=5):
+        """
+        Use ConsistencyCheck.binning() to create binned_data for PredictivenessCheck.
+        The number of bins can be specified (default 5).
+        """
+        cc = ConsistencyCheck(
+            data=self.df,
+            pred_var=self.pred_var,
+            exp_var=self.exp_var,
+            nbins=nbins
+        )
+        cc.binning()
+        self.binned_data = cc.binned_data.copy() if hasattr(cc, 'binned_data') else None
+
+    def aggregate(self):
+        """
+        Aggregate binned data by 'bin', summing specified variables and computing ratios.
+        Handles three cases:
+        1. Numeric variable with enough unique values (is_numeric and not treat_as_cat)
+        2. Numeric variable with low cardinality (is_numeric and treat_as_cat)
+        3. Categorical variable (is_numeric == False)
+        """
+        df = self.binned_data
+        var_1 = self.var_1
+        exp_var = self.exp_var
+        var_2 = self.var_2
+        pred_var = self.pred_var
+
+        is_numeric = np.issubdtype(df['bin'].dtype, np.number)
+        n_unique = df[pred_var].nunique(dropna=True)
+        treat_as_cat = is_numeric and n_unique < 20
+
+        group_cols = ['bin']
+        agg_dict = {var_1: 'sum', exp_var: 'sum'}
+        if var_2 is not None and var_2 in df.columns:
+            agg_dict[var_2] = 'sum'
+
+        if is_numeric and not treat_as_cat:
+            # Numeric variable with enough unique values: aggregate by bin
+            agg_df = df.groupby(group_cols, as_index=False).agg(agg_dict)
+            agg_df[f'{var_1}_over_{exp_var}'] = agg_df[var_1] / agg_df[exp_var]
+            if var_2 is not None and var_2 in agg_df.columns:
+                agg_df[f'{var_2}_over_{exp_var}'] = agg_df[var_2] / agg_df[exp_var]
+            # Add min/max of pred_var for each bin if available
+            if pred_var is not None and pred_var in df.columns:
+                bin_stats = df[df['bin'] != -1].groupby('bin')[pred_var].agg(['min', 'max']).reset_index()
+                bin_stats = bin_stats.rename(columns={'min': f'{pred_var}_min', 'max': f'{pred_var}_max'})
+                agg_df = agg_df.merge(bin_stats, on='bin', how='left')
+            # Set bin_label: missing bin (-1) as 'missing', others as just the value (3 decimals)
+            if pred_var is not None and f'{pred_var}_max' in agg_df.columns:
+                def make_label(row):
+                    if row['bin'] == -1:
+                        return 'missing'
+                    else:
+                        return f"{row[f'{pred_var}_max']:.3f}"
+                agg_df['bin_label'] = agg_df.apply(make_label, axis=1)
+            else:
+                agg_df['bin_label'] = agg_df['bin'].astype(str)
+        elif treat_as_cat:
+            # Numeric variable with low cardinality: treat as categorical
+            agg_df = df.groupby(group_cols, as_index=False).agg(agg_dict)
+            agg_df[f'{var_1}_over_{exp_var}'] = agg_df[var_1] / agg_df[exp_var]
+            if var_2 is not None and var_2 in agg_df.columns:
+                agg_df[f'{var_2}_over_{exp_var}'] = agg_df[var_2] / agg_df[exp_var]
+            # Map bin to value using pred_var
+            if pred_var is not None and pred_var in df.columns:
+                unique_vals = np.sort(df[pred_var].dropna().unique())
+                bin_to_val = {i: v for i, v in enumerate(unique_vals)}
+                agg_df['bin_label'] = agg_df['bin'].map(bin_to_val).astype(str)
+            else:
+                agg_df['bin_label'] = agg_df['bin'].astype(str)
+        else:
+            # Categorical variable: use bin as label
+            agg_df = df.groupby(group_cols, as_index=False).agg(agg_dict)
+            agg_df[f'{var_1}_over_{exp_var}'] = agg_df[var_1] / agg_df[exp_var]
+            if var_2 is not None and var_2 in agg_df.columns:
+                agg_df[f'{var_2}_over_{exp_var}'] = agg_df[var_2] / agg_df[exp_var]
+            agg_df['bin_label'] = agg_df['bin'].astype(str)
+        self.agg_df = agg_df
+
+    def plot(self, var_1_color='blue', var_2_color='red', book_avg_color='green'):
+        """
+        Plot aggregated bin statistics from agg_df.
+        - x-axis: 'bin' (with missing bin first if present), x-ticks as bin_label (for continuous: '<' + value, for others: label)
+        - Left y-axis: line chart of var_1/exp_var (var_1_color), and var_2/exp_var (var_2_color, if provided)
+        - Right y-axis: bar chart of exp_var (grey, alpha=0.5)
+        - Adds a dashed horizontal line at the overall mean of var_1/exp_var (book_avg_color).
+        - Computes Kendall's tau correlation between pred_var and var_1 and displays it in the plot title.
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from scipy.stats import kendalltau
+        agg_df = self.agg_df
+        var_1 = self.var_1
+        var_2 = self.var_2
+        exp_var = self.exp_var
+        pred_var = self.pred_var
+
+        # Sort bins, put missing bin (-1 or 'missing') first if present
+        bins = agg_df['bin'].tolist()
+        if -1 in bins:
+            agg_df = pd.concat([agg_df[agg_df['bin'] == -1], agg_df[agg_df['bin'] != -1]], ignore_index=True)
+        elif 'missing' in bins:
+            agg_df = pd.concat([agg_df[agg_df['bin'] == 'missing'], agg_df[agg_df['bin'] != 'missing']], ignore_index=True)
+
+        x = np.arange(len(agg_df))
+
+        def is_float_str(s):
+            try:
+                float(s)
+                return True
+            except:
+                return False
+
+        bin_labels = []
+        for i, row in agg_df.iterrows():
+            label = str(row['bin_label']) if 'bin_label' in agg_df.columns else str(row['bin'])
+            if row['bin'] == -1 or label.lower() == 'missing':
+                bin_labels.append('missing')
+            elif is_float_str(label):
+                bin_labels.append(f"< {label}")
+            else:
+                bin_labels.append(label)
+
+        # Compute Kendall's tau correlation between pred_var and var_1 using input data
+        tau_str = ''
+        try:
+            # Use only rows where both pred_var and var_1 are not null
+            valid = self.df[[pred_var, var_1]].dropna()
+            if not valid.empty:
+                tau, pval = kendalltau(valid[pred_var], valid[var_1])
+                tau_str = f" [Kendall's tau: {tau:.3f}]"
+        except Exception as e:
+            tau_str = ''
+
+        fig, ax1 = plt.subplots(figsize=(10, 6))
+
+        # Plot var_1/exp_var line
+        y1 = agg_df[f'{var_1}_over_{exp_var}']
+        line1, = ax1.plot(x, y1, marker='o', color=var_1_color, label=f'{var_1}/{exp_var}')
+        lines = [line1]
+        labels = [f'{var_1}/{exp_var}']
+        if var_2 is not None and f'{var_2}_over_{exp_var}' in agg_df.columns:
+            y2 = agg_df[f'{var_2}_over_{exp_var}']
+            line2, = ax1.plot(x, y2, marker='o', color=var_2_color, label=f'{var_2}/{exp_var}')
+            lines.append(line2)
+            labels.append(f'{var_2}/{exp_var}')
+        ax1.set_xlabel(f'{pred_var} bin')
+        ax1.set_ylabel(f'Ratio to {exp_var}')
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(bin_labels, rotation=0, ha='center')
+        ax1.grid(True, linestyle='--', alpha=0.5)
+
+        # Add dashed horizontal line for overall mean ratio
+        overall_mean = agg_df[var_1].sum() / agg_df[exp_var].sum() if agg_df[exp_var].sum() != 0 else np.nan
+        ax1.axhline(overall_mean, color=book_avg_color, linestyle='--', linewidth=2, label=f'Overall {var_1}/{exp_var}')
+        lines.append(plt.Line2D([], [], color=book_avg_color, linestyle='--', linewidth=2))
+        labels.append(f'Overall {var_1}/{exp_var}')
+
+        # Plot exp_var as bars on secondary y-axis
+        ax2 = ax1.twinx()
+        bars = ax2.bar(x, agg_df[exp_var], color='grey', alpha=0.15, width=0.7, label=exp_var, align='center')
+        ax2.set_ylabel(exp_var)
+
+        # Combine legends from both axes and place inside the plot (upper left, not covered by bars)
+        all_handles = lines + [bars]
+        all_labels = labels + [exp_var]
+        ax1.legend(all_handles, all_labels, loc='upper left', bbox_to_anchor=(0.01, 0.99), frameon=True)
+
+        plt.title(f'Binned {pred_var}: Ratios and {exp_var} by Bin {tau_str}')
+        plt.tight_layout()
+        plt.show()
+
+class PredictivenessCheckList:
+    """
+    Runs PredictivenessCheck for a list of predictor variables and provides batch plotting.
+    
+    Parameters:
+        data (pd.DataFrame): Input data.
+        pred_var_lst (list of str): List of predictor variables to check.
+        exp_var (str): Exposure variable (e.g., vehicle count).
+        var_1 (str): Numerator variable for predictiveness ratio.
+        var_2 (str, optional): Second numerator variable for predictiveness ratio.
+        nbins (int): Number of bins for numeric variables (default 5).
+    
+    Methods:
+        run_all(): Runs PredictivenessCheck for each predictor in the list.
+        plot_all(): Plots all predictiveness plots for the predictors.
+    """
+    def __init__(self, data, pred_var_lst, exp_var, var_1, var_2=None, nbins=5):
+        self.data = data
+        self.pred_var_lst = pred_var_lst
+        self.exp_var = exp_var
+        self.var_1 = var_1
+        self.var_2 = var_2
+        self.nbins = nbins
+        self.checks = {}  # Store PredictivenessCheck objects by pred_var
+
+    def run_all(self):
+        # Run PredictivenessCheck for each predictor variable in the list
+        for pred_var in self.pred_var_lst:
+            pc = PredictivenessCheck(
+                df=self.data,
+                pred_var=pred_var,
+                exp_var=self.exp_var,
+                var_1=self.var_1,
+                var_2=self.var_2
+            )
+            pc.binning(nbins=self.nbins)
+            pc.aggregate()
+            self.checks[pred_var] = pc
+
+    def plot_all(self, var_1_color='blue', var_2_color='red', book_avg_color='green'):
+        # Plot all predictiveness plots for the predictor variables
+        for pred_var, pc in self.checks.items():
+            print(f"\n--- Predictiveness Plot for {pred_var} ---")
+            pc.plot(var_1_color=var_1_color, var_2_color=var_2_color, book_avg_color=book_avg_color)
