@@ -3,14 +3,29 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class ConsistencyCheck:
-    def __init__(self, data, pred_var, exp_var, year_var, nbins=5):
+    """
+    Bins and aggregates data for a single predictor variable to check consistency/exposure across bins.
+    Supports numeric, categorical, and low-cardinality numeric variables.
+    
+    Parameters:
+        data (pd.DataFrame): Input data.
+        pred_var (str): Predictor variable to bin.
+        exp_var (str): Exposure variable (e.g., vehicle count).
+        nbins (int): Number of bins for numeric variables (default 5).
+    
+    Methods:
+        binning(): Performs binning based on pred_var type and stores result in self.binned_data.
+        aggregate(year_var): Aggregates exposure and bin statistics by bin and year.
+        plot(): Plots exposure percentage by bin and year.
+    """
+    def __init__(self, data, pred_var, exp_var, nbins=5):
         self.data = data.copy()
         self.pred_var = pred_var
         self.exp_var = exp_var
-        self.year_var = year_var
         self.nbins = nbins
         self.binned_data = None
         self.agg_df = None
+        self.year_var = None
 
     def binning(self):
         pred_var = self.pred_var
@@ -25,6 +40,7 @@ class ConsistencyCheck:
         treat_as_cat = is_numeric and n_unique < 20
 
         if is_numeric and not treat_as_cat:
+            # Numeric variable with enough unique values: bin by equal exposure
             missing_mask = df[pred_var].isna()
             df_non_missing = df[~missing_mask].copy()
             df_missing = df[missing_mask].copy()
@@ -56,28 +72,31 @@ class ConsistencyCheck:
             df_sorted = df_sorted.drop(columns=['cum_exp'])
 
             if not df_missing.empty:
+                # Assign missing values to a special bin
                 df_missing = df_missing.copy()
                 df_missing['bin'] = -1
                 df_sorted = pd.concat([df_sorted, df_missing], axis=0, ignore_index=True)
 
             self.binned_data = df_sorted
         elif treat_as_cat:
+            # Numeric variable with low cardinality: treat as categorical
             ordered_cats = sorted(df[pred_var].dropna().unique())
             cat_to_bin = {cat: i for i, cat in enumerate(ordered_cats)}
             df['bin'] = df[pred_var].map(cat_to_bin)
             df.loc[df[pred_var].isna(), 'bin'] = -1
             self.binned_data = df
         else:
+            # Categorical variable: use category codes as bins
             ordered_cats = sorted(df[pred_var].dropna().unique())
             df['bin'] = pd.Categorical(df[pred_var], categories=ordered_cats, ordered=True)
             df['bin'] = df['bin'].astype(object)
             df.loc[df[pred_var].isna(), 'bin'] = -1
             self.binned_data = df
 
-    def aggregate(self):
+    def aggregate(self, year_var):
         pred_var = self.pred_var
         exp_var = self.exp_var
-        year_var = self.year_var
+        self.year_var = year_var
         df = self.binned_data.copy()
 
         is_numeric = pd.api.types.is_numeric_dtype(self.data[pred_var])
@@ -85,6 +104,7 @@ class ConsistencyCheck:
         treat_as_cat = is_numeric and n_unique < 20
 
         if is_numeric and not treat_as_cat:
+            # Numeric variable with enough unique values: aggregate by bin and year
             agg_df = df.groupby(['bin', year_var], as_index=False).agg({exp_var: 'sum'})
             total_exp_per_year = agg_df.groupby(year_var)[exp_var].transform('sum')
             agg_df[f'{exp_var}_pct'] = agg_df[exp_var] / total_exp_per_year * 100
@@ -93,6 +113,7 @@ class ConsistencyCheck:
             bin_stats = bin_stats.rename(columns={'min': f'{pred_var}_min', 'max': f'{pred_var}_max'})
             agg_df = agg_df.merge(bin_stats, on=['bin', year_var], how='left')
         elif treat_as_cat:
+            # Numeric variable with low cardinality: aggregate by bin and year, map bin to value
             agg_df = df.groupby(['bin', year_var], as_index=False).agg({exp_var: 'sum'})
             total_exp_per_year = agg_df.groupby(year_var)[exp_var].transform('sum')
             agg_df[f'{exp_var}_pct'] = agg_df[exp_var] / total_exp_per_year * 100
@@ -100,6 +121,7 @@ class ConsistencyCheck:
             bin_to_val = {i: v for i, v in enumerate(unique_vals)}
             agg_df[f'{pred_var}_cat'] = agg_df['bin'].map(bin_to_val)
         else:
+            # Categorical variable: aggregate by bin and year
             agg_df = df.groupby(['bin', year_var], as_index=False).agg({exp_var: 'sum'})
             total_exp_per_year = agg_df.groupby(year_var)[exp_var].transform('sum')
             agg_df[f'{exp_var}_pct'] = agg_df[exp_var] / total_exp_per_year * 100
@@ -117,6 +139,7 @@ class ConsistencyCheck:
         plt.figure(figsize=(10, 6))
 
         if f'{pred_var}_max' in agg_df.columns:
+            # Numeric variable with enough unique values: plot by bin max
             x_col = f'{pred_var}_max'
             y_col = f'{exp_var}_pct'
             bin_labels = []
@@ -140,6 +163,7 @@ class ConsistencyCheck:
             plt.ylabel(y_col + ' (%)')
             plt.title(f'Line Chart of {y_col} by {pred_var} bin and {year_var}')
         else:
+            # Categorical or low-cardinality: plot by bin
             x_col = 'bin'
             y_col = f'{exp_var}_pct'
             categories = agg_df[x_col].unique()
@@ -160,6 +184,20 @@ class ConsistencyCheck:
         plt.show()
 
 class ConsistencyCheckList:
+    """
+    Runs ConsistencyCheck for a list of predictor variables and provides batch plotting.
+    
+    Parameters:
+        data (pd.DataFrame): Input data.
+        pred_var_lst (list of str): List of predictor variables to check.
+        expo_var (str): Exposure variable (e.g., vehicle count).
+        year_var (str): Year variable for grouping.
+        nbins (int): Number of bins for numeric variables (default 5).
+    
+    Methods:
+        run_all(): Runs ConsistencyCheck for each predictor in the list.
+        plot_all(): Plots all consistency plots for the predictors.
+    """
     def __init__(self, data, pred_var_lst, expo_var, year_var, nbins=5):
         self.data = data
         self.pred_var_lst = pred_var_lst
@@ -169,19 +207,20 @@ class ConsistencyCheckList:
         self.checks = {}  # Store ConsistencyCheck objects by pred_var
 
     def run_all(self):
+    # Run ConsistencyCheck for each predictor variable in the list
         for pred_var in self.pred_var_lst:
             cc = ConsistencyCheck(
                 data=self.data,
                 pred_var=pred_var,
                 exp_var=self.expo_var,
-                year_var=self.year_var,
                 nbins=self.nbins
             )
             cc.binning()
-            cc.aggregate()
+            cc.aggregate(year_var=self.year_var)
             self.checks[pred_var] = cc
 
     def plot_all(self):
+    # Plot all consistency plots for the predictor variables
         for pred_var, cc in self.checks.items():
             print(f"\n--- Consistency Plot for {pred_var} ---")
             cc.plot()
