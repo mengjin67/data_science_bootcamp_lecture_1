@@ -43,4 +43,10 @@ class DataETL:
                     self.data[var] = self.data[var].clip(upper=cap_value)
                     print(f"{var} capped at {cap_value}")
 
+        # Assume single vehicle policy and create a vehicle count variable
+        self.data['veh_cnt'] = 1
+
+        # Add policy year 
+        self.data['pol_year'] = 2018
+
         return self.data
