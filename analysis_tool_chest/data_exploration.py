@@ -298,7 +298,7 @@ class PredictivenessCheck:
                     if row['bin'] == -1:
                         return 'missing'
                     else:
-                        return f"{row[f'{pred_var}_max']:.3f}"
+                        return f"{row[f'{pred_var}_max']:.2f}"
                 agg_df['bin_label'] = agg_df.apply(make_label, axis=1)
             else:
                 agg_df['bin_label'] = agg_df['bin'].astype(str)
@@ -324,7 +324,7 @@ class PredictivenessCheck:
             agg_df['bin_label'] = agg_df['bin'].astype(str)
         self.agg_df = agg_df
 
-    def plot(self, var_1_color='blue', var_2_color='red', book_avg_color='green'):
+    def plot(self, var_1_color='blue', var_2_color='red', book_avg_color='green', figsize=(10, 6)):
         """
         Plot aggregated bin statistics from agg_df.
         - x-axis: 'bin' (with missing bin first if present), x-ticks as bin_label (for continuous: '<' + value, for others: label)
@@ -375,11 +375,11 @@ class PredictivenessCheck:
             valid = self.df[[pred_var, var_1]].dropna()
             if not valid.empty:
                 tau, pval = kendalltau(valid[pred_var], valid[var_1])
-                tau_str = f" [Kendall's tau: {tau:.3f}]"
+                tau_str = f" [Kendall's tau: {tau:.2f}]"
         except Exception as e:
             tau_str = ''
 
-        fig, ax1 = plt.subplots(figsize=(10, 6))
+        fig, ax1 = plt.subplots(figsize=figsize)
 
         # Plot var_1/exp_var line
         y1 = agg_df[f'{var_1}_over_{exp_var}']
@@ -399,6 +399,7 @@ class PredictivenessCheck:
 
         # Add dashed horizontal line for overall mean ratio
         overall_mean = agg_df[var_1].sum() / agg_df[exp_var].sum() if agg_df[exp_var].sum() != 0 else np.nan
+        self.overall_mean = overall_mean
         ax1.axhline(overall_mean, color=book_avg_color, linestyle='--', linewidth=2, label=f'Overall {var_1}/{exp_var}')
         lines.append(plt.Line2D([], [], color=book_avg_color, linestyle='--', linewidth=2))
         labels.append(f'Overall {var_1}/{exp_var}')
