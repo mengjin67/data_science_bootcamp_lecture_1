@@ -323,6 +323,7 @@ class PredictivenessCheck:
                 agg_df[f'{var_2}_over_{exp_var}'] = agg_df[var_2] / agg_df[exp_var]
             agg_df['bin_label'] = agg_df['bin'].astype(str)
         self.agg_df = agg_df
+        self.overall_mean = self.agg_df[self.var_1].sum() / self.agg_df[self.exp_var].sum() if self.agg_df[self.exp_var].sum() != 0 else np.nan
 
     def plot(self, var_1_color='blue', var_2_color='red', book_avg_color='green', figsize=(10, 6)):
         """
@@ -398,9 +399,7 @@ class PredictivenessCheck:
         ax1.grid(True, linestyle='--', alpha=0.5)
 
         # Add dashed horizontal line for overall mean ratio
-        overall_mean = agg_df[var_1].sum() / agg_df[exp_var].sum() if agg_df[exp_var].sum() != 0 else np.nan
-        self.overall_mean = overall_mean
-        ax1.axhline(overall_mean, color=book_avg_color, linestyle='--', linewidth=2, label=f'Overall {var_1}/{exp_var}')
+        ax1.axhline(self.overall_mean, color=book_avg_color, linestyle='--', linewidth=2, label=f'Overall {var_1}/{exp_var}')
         lines.append(plt.Line2D([], [], color=book_avg_color, linestyle='--', linewidth=2))
         labels.append(f'Overall {var_1}/{exp_var}')
 
@@ -417,6 +416,10 @@ class PredictivenessCheck:
         plt.title(f'Binned {pred_var}: Ratios and {exp_var} by Bin {tau_str}')
         plt.tight_layout()
         plt.show()
+
+    def top_lift(self):
+        self.top_lift = list(self.agg_df[f'{self.var_1}_over_{self.exp_var}'])[-1] / self.overall_mean if self.overall_mean != 0 else np.nan
+        return self.top_lift
 
 class PredictivenessCheckList:
     """
