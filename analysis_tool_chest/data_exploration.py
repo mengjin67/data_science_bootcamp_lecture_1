@@ -342,6 +342,7 @@ class PredictivenessCheck:
         var_2 = self.var_2
         exp_var = self.exp_var
         pred_var = self.pred_var
+        df = self.binned_data
 
         # Sort bins, put missing bin (-1 or 'missing') first if present
         bins = agg_df['bin'].tolist()
@@ -359,13 +360,22 @@ class PredictivenessCheck:
             except:
                 return False
 
+        # Determine if pred_var is numeric and has < 20 unique values (treat_as_cat logic)
+        is_numeric = pd.api.types.is_numeric_dtype(self.df[self.pred_var])
+        n_unique = self.df[self.pred_var].nunique(dropna=True)
+        treat_as_cat = is_numeric and n_unique < 20
+
         bin_labels = []
         for i, row in agg_df.iterrows():
             label = str(row['bin_label']) if 'bin_label' in agg_df.columns else str(row['bin'])
             if row['bin'] == -1 or label.lower() == 'missing':
                 bin_labels.append('missing')
             elif is_float_str(label):
-                bin_labels.append(f"< {label}")
+                # Only add '<' if not treat_as_cat (i.e., truly binned numeric)
+                if not treat_as_cat:
+                    bin_labels.append(f"< {label}")
+                else:
+                    bin_labels.append(label)
             else:
                 bin_labels.append(label)
 
