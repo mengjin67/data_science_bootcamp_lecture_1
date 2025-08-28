@@ -12,6 +12,7 @@ dependencies = [
     "pyarrow>=21.0.0",
     "rich>=14.1.0",
     "scikit-learn>=1.7.1",
+    "seaborn>=0.13.2",
     "setuptools>=80.9.0",
     "xgboost>=3.0.4",
     "ydata-profiling>=4.16.1",
