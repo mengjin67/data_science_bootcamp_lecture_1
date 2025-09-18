@@ -100,7 +100,7 @@ Your final delivery should include two parts, with the focus on part 1.
 1. Internal review (Technical Audience)
    - Target: Data scientists
    - Purpose: Describe the modeling procedures and techniques used at each stage, with particular emphasis on **data exploration** and **model selection**. Include both qualitative discussion and quantitative results from your analysis.
-   - Note: You do not need to include every modeling technique discussed in the Modeling section above, please decide based on your interest and availability.
+   - Note: You do not need to include every modeling technique discussed in the Modeling section above, please decide based on your interest and availability, and the fitness of the techniques to the data.
 2. External review (Business Audience)
    - Target: Stakeholders (underwriters, actuaries, sales team)
    - Purpose: Address the original business questions in a clear and actionable way.
