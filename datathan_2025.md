@@ -49,22 +49,25 @@ Your manager suggest moving away from exhausive grid/random search due to its in
 
 Tutorial on this topic:
 
-- [interactive hyper-parameter tunning blog 1](https://www.analyticsvidhya.com/blog/2016/02/complete-guide-parameter-tuning-gradient-boosting-gbm-python/)
+- [interactive hyper-parameter tunning blog 1](https://www.analyticsvidhya.com/blog/2016/02/complete-guide-parameter-tuning-gradient-boosting-gbm-python/).
 - [interactive hyper-parameter tunning blog 2](https://www.analyticsvidhya.com/blog/2016/03/complete-guide-parameter-tuning-xgboost-with-codes-python/). Refer to [model_selection.ipynb](https://github.com/mengjin67/data_science_bootcamp_lecture_1/blob/9487a900ff3be60716a8c534c96207bc399e5ea8/analysis_pipeline/model_selection.ipynb) for more details.
 
 Whatever method you choose, please include a detailed description of the hyperparameters and tuning strategy.
 
 #### 3. Foundation Models for Tabular Data
 
-Due to the popularity of large language models, transformer architectures have gain popularity. A 2025 article in _Nature_ titled "Accurate predictions on small data with a tabular foundation model" ([https://arxiv.org/abs/2207.01848](https://arxiv.org/abs/2207.01848)) presents `TabTPN`, a transformer-based model that claims superior performance on small to medium size tabular datasets.
+Due to the popularity of large language models, transformer architectures have gain popularity. A 2025 article in _Nature_ titled "Accurate predictions on small data with a tabular foundation model" presents `TabPFN`, a transformer-based model that claims superior performance on small to medium size tabular datasets.
 
 In this project, you may explore and compare `TabTPN`'s performance against the tree-based models built.
 
-Resources: [https://github.com/PriorLabs/TabPFN](https://github.com/PriorLabs/TabPFN).
+Resources:
+
+- `TabPFN` paper: [https://arxiv.org/abs/2207.01848](https://arxiv.org/abs/2207.01848).
+- [https://github.com/PriorLabs/TabPFN](https://github.com/PriorLabs/TabPFN).
 
 Refer to [model_selection.ipynb](https://github.com/mengjin67/data_science_bootcamp_lecture_1/blob/9487a900ff3be60716a8c534c96207bc399e5ea8/analysis_pipeline/model_selection.ipynb) for some more notes.
 
-If you choose to use `TabTPN`, please include a detailed explanation of this method, along with its strengths and limitations, in the final delivery.
+If you choose to use `TabPFN`, please include a detailed explanation of this method, along with its strengths and limitations, in the final delivery.
 
 #### 4. Frequency-Severity Modeling & Exposure Handling
 
@@ -88,7 +91,7 @@ Machine learning models are often criticized as "black box" due to their lack of
 
 Resources:
 
-- `SHAP` paper: [https://arxiv.org/abs/1705.07874](https://arxiv.org/abs/.1705.07874)
+- `SHAP` paper: [https://arxiv.org/abs/1705.07874](https://arxiv.org/abs/1705.07874).
 - [Explaining XGBoost model predictions with SHAP values — SAMueL - Stroke Audit Machine Learning](https://samuel-book.github.io/samuel_shap_paper_1/xgb_10_features/03_xgb_combined_shap_key_features.html).
 
 Please use `SHAP`, or similar tools, to explain your model results - this will be particularly helpful for addressing business questions.
