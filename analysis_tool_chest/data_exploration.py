@@ -182,6 +182,7 @@ class ConsistencyCheck:
             plt.xticks(bin_positions, bin_labels)
             plt.xlabel(f"{pred_var} bin")
             plt.ylabel(y_col + " (%)")
+            plt.ylim(bottom=0)
             plt.title(f"Line Chart of {y_col} by {pred_var} bin and {year_var}")
         else:
             # Categorical or low-cardinality: plot by bin
@@ -203,6 +204,7 @@ class ConsistencyCheck:
             plt.xticks(positions, cat_labels)
             plt.xlabel(pred_var)
             plt.ylabel(y_col + " (%)")
+            plt.ylim(bottom=0)
             plt.title(f"Line Chart of {y_col} by {pred_var} and {year_var}")
 
         plt.legend(title=year_var)
