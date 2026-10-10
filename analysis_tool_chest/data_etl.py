@@ -32,7 +32,7 @@ class DataETL:
         # Assume single vehicle policy and create a vehicle count variable
         self.data["veh_cnt"] = 1
 
-        # Add policy year
+        # Tag the data segment (used later in the consistency check)
         self.data["data_segment"] = "2|inference"
 
         return self.data

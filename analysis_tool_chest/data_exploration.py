@@ -371,9 +371,10 @@ class PredictivenessCheck:
         var_2_color="red",
         book_avg_color="green",
         figsize=(10, 6),
+        pdf=None,
     ):
         """
-        Plot aggregated bin statistics from agg_df.
+        Plot aggregated bin statistics from agg_df. If pdf (a matplotlib PdfPages object) is given, also add the figure as a page to it.
         - x-axis: 'bin' (with missing bin first if present), x-ticks as bin_label (for continuous: '<' + value, for others: label)
         - Left y-axis: line chart of var_1/exp_var (var_1_color), and var_2/exp_var (var_2_color, if provided)
         - Right y-axis: bar chart of exp_var (grey, alpha=0.5)
@@ -511,6 +512,8 @@ class PredictivenessCheck:
 
         plt.title(f"Binned {pred_var}: Ratios and {exp_var} by Bin {tau_str}")
         plt.tight_layout()
+        if pdf is not None:
+            pdf.savefig(fig, bbox_inches="tight")
         plt.show()
 
     def top_lift(self):
@@ -563,12 +566,31 @@ class PredictivenessCheckList:
             pc.aggregate()
             self.checks[pred_var] = pc
 
-    def plot_all(self, var_1_color="blue", var_2_color="red", book_avg_color="green"):
-        # Plot all predictiveness plots for the predictor variables
-        for pred_var, pc in self.checks.items():
-            print(f"\n--- Predictiveness Plot for {pred_var} ---")
-            pc.plot(
-                var_1_color=var_1_color,
-                var_2_color=var_2_color,
-                book_avg_color=book_avg_color,
-            )
+    def plot_all(
+        self,
+        var_1_color="blue",
+        var_2_color="red",
+        book_avg_color="green",
+        pdf_path=None,
+    ):
+        # Plot all predictiveness plots for the predictor variables.
+        # If pdf_path is given, also save them to one PDF file, one plot per page.
+        import os
+        from matplotlib.backends.backend_pdf import PdfPages
+
+        pdf = None
+        if pdf_path is not None:
+            os.makedirs(os.path.dirname(pdf_path) or ".", exist_ok=True)
+            pdf = PdfPages(pdf_path)
+        try:
+            for pred_var, pc in self.checks.items():
+                print(f"\n--- Predictiveness Plot for {pred_var} ---")
+                pc.plot(
+                    var_1_color=var_1_color,
+                    var_2_color=var_2_color,
+                    book_avg_color=book_avg_color,
+                    pdf=pdf,
+                )
+        finally:
+            if pdf is not None:
+                pdf.close()
