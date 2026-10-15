@@ -452,9 +452,14 @@ class PredictivenessCheck:
         pdf=None,
         show=True,
         legend_loc="auto",
+        names=None,
     ):
         """
-        Plot aggregated bin statistics from agg_df. If pdf (a matplotlib PdfPages object) is given, also add the figure as a page to it.
+        Plot aggregated bin statistics from agg_df.
+        If pdf (a matplotlib PdfPages object) is given, also add the figure as a page to it.
+        names (optional dict) overrides the text on the plot; keys: y, var_1, var_2, overall, exp, x, title,
+        xticks ("number" labels the bins 1, 2, ...).
+        "x" can use {pred_var} and {n} (number of bins); "title" can use {pred_var} and {tau} (rank correlation text).
         - x-axis: 'bin' (with missing bin first if present), x-ticks as bin_label (for continuous: '<' + value, for others: label)
         - Left y-axis: line chart of var_1/exp_var (var_1_color), and var_2/exp_var (var_2_color, if provided)
         - Right y-axis: bar chart of exp_var (grey, alpha=0.5)
@@ -527,29 +532,32 @@ class PredictivenessCheck:
             valid = self.df[[pred_var, var_1]].dropna()
             if not valid.empty:
                 tau, pval = kendalltau(valid[pred_var], valid[var_1])
-                tau_str = f" [Kendall's tau: {tau:.2f}]"
+                tau_str = f" (rank correlation: {tau:.2f})"
         except Exception as e:
             tau_str = ""
 
         fig, ax1 = plt.subplots(figsize=figsize)
+        names = names or {}
 
         # Plot var_1/exp_var line
         y1 = agg_df[f"{var_1}_over_{exp_var}"]
-        (line1,) = ax1.plot(
-            x, y1, marker="o", color=var_1_color, label=f"{var_1}/{exp_var}"
-        )
+        var_1_text = names.get("var_1", f"{var_1}/{exp_var}")
+        (line1,) = ax1.plot(x, y1, marker="o", color=var_1_color, label=var_1_text)
         lines = [line1]
-        labels = [f"{var_1}/{exp_var}"]
+        labels = [var_1_text]
         if var_2 is not None and f"{var_2}_over_{exp_var}" in agg_df.columns:
             y2 = agg_df[f"{var_2}_over_{exp_var}"]
-            (line2,) = ax1.plot(
-                x, y2, marker="o", color=var_2_color, label=f"{var_2}/{exp_var}"
-            )
+            var_2_text = names.get("var_2", f"{var_2}/{exp_var}")
+            (line2,) = ax1.plot(x, y2, marker="o", color=var_2_color, label=var_2_text)
             lines.append(line2)
-            labels.append(f"{var_2}/{exp_var}")
-        ax1.set_xlabel(f"{pred_var} bin")
-        ax1.set_ylabel(f"Ratio to {exp_var}")
+            labels.append(var_2_text)
+        ax1.set_xlabel(
+            names.get("x", "{pred_var} bin").format(pred_var=pred_var, n=len(x))
+        )
+        ax1.set_ylabel(names.get("y", f"Ratio to {exp_var}"))
         ax1.set_xticks(x)
+        if names.get("xticks") == "number":  # label bins 1, 2, ... instead of cut-off values
+            bin_labels = [str(i + 1) for i in range(len(x))]
         ax1.set_xticklabels(bin_labels, rotation=0, ha="center")
         ax1.grid(True, linestyle="--", alpha=0.5)
 
@@ -559,12 +567,12 @@ class PredictivenessCheck:
             color=book_avg_color,
             linestyle="--",
             linewidth=2,
-            label=f"Overall {var_1}/{exp_var}",
+            label=names.get("overall", f"Overall {var_1}/{exp_var}"),
         )
         lines.append(
             plt.Line2D([], [], color=book_avg_color, linestyle="--", linewidth=2)
         )
-        labels.append(f"Overall {var_1}/{exp_var}")
+        labels.append(names.get("overall", f"Overall {var_1}/{exp_var}"))
 
         # Plot exp_var as bars on secondary y-axis
         ax2 = ax1.twinx()
@@ -574,16 +582,16 @@ class PredictivenessCheck:
             color="grey",
             alpha=0.15,
             width=0.7,
-            label=exp_var,
+            label=names.get("exp", exp_var),
             align="center",
         )
-        ax2.set_ylabel(exp_var)
+        ax2.set_ylabel(names.get("exp", exp_var))
 
         # Combine legends from both axes and place inside the plot.
         # legend_loc="auto" picks the corner that covers the least of the lines and bars
         # (upper right preferred); or pass any matplotlib corner such as "upper left".
         all_handles = lines + [bars]
-        all_labels = labels + [exp_var]
+        all_labels = labels + [names.get("exp", exp_var)]
         if legend_loc == "auto":
             loc, anchor = _auto_legend_loc(
                 fig,
@@ -606,7 +614,10 @@ class PredictivenessCheck:
             frameon=True,
         )
 
-        plt.title(f"Binned {pred_var}: Ratios and {exp_var} by Bin {tau_str}")
+        title = names.get(
+            "title", "Binned {pred_var}: Ratios and " + exp_var + " by Bin {tau}"
+        )
+        plt.title(title.format(pred_var=pred_var, tau=tau_str))
         plt.tight_layout()
         if pdf is not None:
             pdf.savefig(fig, bbox_inches="tight")
@@ -674,6 +685,7 @@ class PredictivenessCheckList:
         show_vars=None,
         legend_loc="auto",
         figsize=(10, 4.5),
+        names=None,
     ):
         # Plot the predictiveness plots for the predictor variables.
         # If pdf_path is given, also save all of them to one PDF file, one plot per page.
@@ -681,8 +693,8 @@ class PredictivenessCheckList:
         import os
         from matplotlib.backends.backend_pdf import PdfPages
 
-        names = list(self.checks) if show_vars is None else list(show_vars)
-        missing = [v for v in names if v not in self.checks]
+        plot_vars = list(self.checks) if show_vars is None else list(show_vars)
+        missing = [v for v in plot_vars if v not in self.checks]
         if missing:
             raise ValueError(f"show_vars not in pred_var_lst: {missing}")
         colors = dict(
@@ -691,6 +703,7 @@ class PredictivenessCheckList:
             book_avg_color=book_avg_color,
             legend_loc=legend_loc,
             figsize=figsize,
+            names=names,
         )
 
         # Save every plot to the PDF (in pred_var_lst order) without showing them
@@ -701,12 +714,12 @@ class PredictivenessCheckList:
                     pc.plot(pdf=pdf, show=False, **colors)
 
         # Show the selected plots in the notebook
-        for pred_var in names:
+        for pred_var in plot_vars:
             print(f"\n--- Predictiveness Plot for {pred_var} ---")
             self.checks[pred_var].plot(**colors)
 
-        if len(names) < len(self.checks):
-            msg = f"\nShowing {len(names)} of {len(self.checks)} plots."
+        if len(plot_vars) < len(self.checks):
+            msg = f"\nShowing {len(plot_vars)} of {len(self.checks)} plots."
             if pdf_path is not None:
                 msg += f" All {len(self.checks)} are saved in {pdf_path}."
             print(msg)
