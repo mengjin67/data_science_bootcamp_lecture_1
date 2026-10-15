@@ -147,7 +147,7 @@ class ConsistencyCheck:
             agg_df[f"{pred_var}_cat"] = agg_df["bin"]
         self.agg_df = agg_df
 
-    def plot(self):
+    def plot(self, figsize=(10, 6)):
         import matplotlib.pyplot as plt
 
         pred_var = self.pred_var
@@ -155,7 +155,7 @@ class ConsistencyCheck:
         year_var = self.year_var
         agg_df = self.agg_df
 
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=figsize)
 
         if f"{pred_var}_max" in agg_df.columns:
             # Numeric variable with enough unique values: plot by bin max
@@ -250,7 +250,7 @@ class ConsistencyCheckList:
             cc.aggregate(year_var=self.year_var)
             self.checks[pred_var] = cc
 
-    def plot_all(self, show_vars=None):
+    def plot_all(self, show_vars=None, figsize=(10, 4.5)):
         # Plot the consistency plots for the predictor variables.
         # If show_vars (a list of predictors) is given, only those are shown, in that order.
         names = list(self.checks) if show_vars is None else list(show_vars)
@@ -259,7 +259,7 @@ class ConsistencyCheckList:
             raise ValueError(f"show_vars not in pred_var_lst: {missing}")
         for pred_var in names:
             print(f"\n--- Consistency Plot for {pred_var} ---")
-            self.checks[pred_var].plot()
+            self.checks[pred_var].plot(figsize=figsize)
         if len(names) < len(self.checks):
             print(f"\nShowing {len(names)} of {len(self.checks)} plots.")
 
@@ -673,6 +673,7 @@ class PredictivenessCheckList:
         pdf_path=None,
         show_vars=None,
         legend_loc="auto",
+        figsize=(10, 4.5),
     ):
         # Plot the predictiveness plots for the predictor variables.
         # If pdf_path is given, also save all of them to one PDF file, one plot per page.
@@ -689,6 +690,7 @@ class PredictivenessCheckList:
             var_2_color=var_2_color,
             book_avg_color=book_avg_color,
             legend_loc=legend_loc,
+            figsize=figsize,
         )
 
         # Save every plot to the PDF (in pred_var_lst order) without showing them
