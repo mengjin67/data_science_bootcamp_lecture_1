@@ -250,11 +250,18 @@ class ConsistencyCheckList:
             cc.aggregate(year_var=self.year_var)
             self.checks[pred_var] = cc
 
-    def plot_all(self):
-        # Plot all consistency plots for the predictor variables
-        for pred_var, cc in self.checks.items():
+    def plot_all(self, show_vars=None):
+        # Plot the consistency plots for the predictor variables.
+        # If show_vars (a list of predictors) is given, only those are shown, in that order.
+        names = list(self.checks) if show_vars is None else list(show_vars)
+        missing = [v for v in names if v not in self.checks]
+        if missing:
+            raise ValueError(f"show_vars not in pred_var_lst: {missing}")
+        for pred_var in names:
             print(f"\n--- Consistency Plot for {pred_var} ---")
-            cc.plot()
+            self.checks[pred_var].plot()
+        if len(names) < len(self.checks):
+            print(f"\nShowing {len(names)} of {len(self.checks)} plots.")
 
 
 class PredictivenessCheck:
@@ -372,6 +379,7 @@ class PredictivenessCheck:
         book_avg_color="green",
         figsize=(10, 6),
         pdf=None,
+        show=True,
     ):
         """
         Plot aggregated bin statistics from agg_df. If pdf (a matplotlib PdfPages object) is given, also add the figure as a page to it.
@@ -514,7 +522,10 @@ class PredictivenessCheck:
         plt.tight_layout()
         if pdf is not None:
             pdf.savefig(fig, bbox_inches="tight")
-        plt.show()
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
 
     def top_lift(self):
         self.top_lift = (
@@ -572,25 +583,38 @@ class PredictivenessCheckList:
         var_2_color="red",
         book_avg_color="green",
         pdf_path=None,
+        show_vars=None,
     ):
-        # Plot all predictiveness plots for the predictor variables.
-        # If pdf_path is given, also save them to one PDF file, one plot per page.
+        # Plot the predictiveness plots for the predictor variables.
+        # If pdf_path is given, also save all of them to one PDF file, one plot per page.
+        # If show_vars (a list of predictors) is given, only those are shown in the notebook, in that order.
         import os
         from matplotlib.backends.backend_pdf import PdfPages
 
-        pdf = None
+        names = list(self.checks) if show_vars is None else list(show_vars)
+        missing = [v for v in names if v not in self.checks]
+        if missing:
+            raise ValueError(f"show_vars not in pred_var_lst: {missing}")
+        colors = dict(
+            var_1_color=var_1_color,
+            var_2_color=var_2_color,
+            book_avg_color=book_avg_color,
+        )
+
+        # Save every plot to the PDF (in pred_var_lst order) without showing them
         if pdf_path is not None:
             os.makedirs(os.path.dirname(pdf_path) or ".", exist_ok=True)
-            pdf = PdfPages(pdf_path)
-        try:
-            for pred_var, pc in self.checks.items():
-                print(f"\n--- Predictiveness Plot for {pred_var} ---")
-                pc.plot(
-                    var_1_color=var_1_color,
-                    var_2_color=var_2_color,
-                    book_avg_color=book_avg_color,
-                    pdf=pdf,
-                )
-        finally:
-            if pdf is not None:
-                pdf.close()
+            with PdfPages(pdf_path) as pdf:
+                for pc in self.checks.values():
+                    pc.plot(pdf=pdf, show=False, **colors)
+
+        # Show the selected plots in the notebook
+        for pred_var in names:
+            print(f"\n--- Predictiveness Plot for {pred_var} ---")
+            self.checks[pred_var].plot(**colors)
+
+        if len(names) < len(self.checks):
+            msg = f"\nShowing {len(names)} of {len(self.checks)} plots."
+            if pdf_path is not None:
+                msg += f" All {len(self.checks)} are saved in {pdf_path}."
+            print(msg)
