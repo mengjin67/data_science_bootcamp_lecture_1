@@ -264,6 +264,77 @@ class ConsistencyCheckList:
             print(f"\nShowing {len(names)} of {len(self.checks)} plots.")
 
 
+def _auto_legend_loc(fig, ax1, ax2, handles, labels, xs, ys_list, mean_y, bar_heights, bar_width=0.7):
+    """
+    Pick the corner of ax1 where a legend covers the least of the lines and bars.
+    Corners are tried in the order upper right, upper left, lower right, lower left,
+    so the upper right wins ties. Returns (loc, bbox_to_anchor) for ax1.legend().
+    """
+    import numpy as np
+
+    anchors = {
+        "upper right": (0.99, 0.99),
+        "upper left": (0.01, 0.99),
+        "lower right": (0.99, 0.01),
+        "lower left": (0.01, 0.01),
+    }
+    try:
+        # Measure the legend size in axes coordinates with a temporary legend
+        tmp = ax1.legend(handles, labels, loc="upper right", frameon=True)
+        fig.canvas.draw()
+        bb = tmp.get_window_extent(fig.canvas.get_renderer()).transformed(
+            ax1.transAxes.inverted()
+        )
+        w, h = bb.width, bb.height
+        tmp.remove()
+
+        x0, x1 = ax1.get_xlim()
+        y0, y1 = ax1.get_ylim()
+        bar_top_max = ax2.get_ylim()[1]
+        nx = lambda v: (np.asarray(v, float) - x0) / (x1 - x0)
+        ny = lambda v: (np.asarray(v, float) - y0) / (y1 - y0)
+
+        # Points along the lines, in axes coordinates
+        pts = []
+        for ys in ys_list:
+            ys = np.asarray(ys, float)
+            ok = ~np.isnan(ys)
+            if ok.sum() == 0:
+                continue
+            xx = np.linspace(min(xs), max(xs), 200)
+            pts.append(np.column_stack([nx(xx), ny(np.interp(xx, np.asarray(xs)[ok], ys[ok]))]))
+        pts = np.vstack(pts) if pts else np.empty((0, 2))
+        marker_pts = [
+            (float(nx(xi)), float(ny(yi)))
+            for ys in ys_list
+            for xi, yi in zip(xs, ys)
+            if not np.isnan(yi)
+        ]
+        mean_n = float(ny(mean_y))
+
+        best_loc, best_score = "upper left", None
+        for loc, (ax_, ay_) in anchors.items():
+            xl, xr = (ax_ - w, ax_) if "right" in loc else (ax_, ax_ + w)
+            yb, yt = (ay_ - h, ay_) if "upper" in loc else (ay_, ay_ + h)
+            in_box = (pts[:, 0] >= xl) & (pts[:, 0] <= xr) & (pts[:, 1] >= yb) & (pts[:, 1] <= yt)
+            score = 10.0 * (in_box.mean() if len(pts) else 0.0)  # line covered
+            for xi, yi in marker_pts:  # a data point hidden by the legend is the worst case
+                if xl - 0.02 <= xi <= xr + 0.02 and yb - 0.03 <= yi <= yt + 0.03:
+                    score += 5.0
+            if yb <= mean_n <= yt:  # dashed overall-mean line
+                score += 1.0
+            for xi, bh in zip(xs, bar_heights):  # grey exposure bars
+                bx0, bx1 = nx(xi - bar_width / 2), nx(xi + bar_width / 2)
+                ox = max(0.0, min(xr, bx1) - max(xl, bx0))
+                oy = max(0.0, min(yt, float(bh) / bar_top_max) - yb)
+                score += ox * oy / (w * h)
+            if best_score is None or score < best_score - 1e-9:
+                best_loc, best_score = loc, score
+        return best_loc, anchors[best_loc]
+    except Exception:
+        return "upper left", anchors["upper left"]
+
+
 class PredictivenessCheck:
     """
     Bins, aggregates, and plots predictiveness statistics for a given predictor and target.
@@ -380,6 +451,7 @@ class PredictivenessCheck:
         figsize=(10, 6),
         pdf=None,
         show=True,
+        legend_loc="auto",
     ):
         """
         Plot aggregated bin statistics from agg_df. If pdf (a matplotlib PdfPages object) is given, also add the figure as a page to it.
@@ -507,14 +579,30 @@ class PredictivenessCheck:
         )
         ax2.set_ylabel(exp_var)
 
-        # Combine legends from both axes and place inside the plot (upper left, not covered by bars)
+        # Combine legends from both axes and place inside the plot.
+        # legend_loc="auto" picks the corner that covers the least of the lines and bars
+        # (upper right preferred); or pass any matplotlib corner such as "upper left".
         all_handles = lines + [bars]
         all_labels = labels + [exp_var]
+        if legend_loc == "auto":
+            loc, anchor = _auto_legend_loc(
+                fig,
+                ax1,
+                ax2,
+                all_handles,
+                all_labels,
+                list(x),
+                [y1] + ([y2] if var_2 is not None and f"{var_2}_over_{exp_var}" in agg_df.columns else []),
+                self.overall_mean,
+                list(agg_df[exp_var]),
+            )
+        else:
+            loc, anchor = legend_loc, None
         ax1.legend(
             all_handles,
             all_labels,
-            loc="upper left",
-            bbox_to_anchor=(0.01, 0.99),
+            loc=loc,
+            bbox_to_anchor=anchor,
             frameon=True,
         )
 
@@ -584,6 +672,7 @@ class PredictivenessCheckList:
         book_avg_color="green",
         pdf_path=None,
         show_vars=None,
+        legend_loc="auto",
     ):
         # Plot the predictiveness plots for the predictor variables.
         # If pdf_path is given, also save all of them to one PDF file, one plot per page.
@@ -599,6 +688,7 @@ class PredictivenessCheckList:
             var_1_color=var_1_color,
             var_2_color=var_2_color,
             book_avg_color=book_avg_color,
+            legend_loc=legend_loc,
         )
 
         # Save every plot to the PDF (in pred_var_lst order) without showing them
